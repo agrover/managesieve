@@ -1,0 +1,11 @@
+[package]
+name = "managesieve"
+version = "0.1.0"
+authors = ["Andy Grover <andy@groveronline.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Support for parsing ManageSieve protocol (RFC 5804)"
+
+[dependencies]
+nom = "6.2.0"
+either = "1.6.1"
