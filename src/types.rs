@@ -159,7 +159,7 @@ impl ToString for Command {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Response {
     pub tag: OkNoBye,
     pub code: Option<(ResponseCode, Option<String>)>,
@@ -187,10 +187,9 @@ impl std::fmt::Display for OkNoBye {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct SieveUrl;
+pub type SieveUrl = String;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum QuotaVariant {
     None,
     MaxScripts,
@@ -200,7 +199,7 @@ pub enum QuotaVariant {
 type SieveString = String;
 type HumanReadableString = SieveString;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ResponseCode {
     AuthTooWeak,
     EncryptNeeded,
@@ -216,9 +215,9 @@ pub enum ResponseCode {
     Warnings,
 }
 
-fn response_oknobye(input: &str) -> Result<Response, Error> {
+fn response_oknobye(input: &str) -> Result<(&str, Response), Error> {
     match p::response(input) {
-        Ok((_, response)) => Ok(response),
+        Ok((left, response)) => Ok((left, response)),
         Err(e) => match e {
             nom::Err::Incomplete(_) => Err(Error::IncompleteResponse),
             nom::Err::Error(_) => Err(Error::InvalidResponse),
@@ -232,34 +231,34 @@ pub fn response_authenticate(_input: &str) -> Result<OkNoBye, Error> {
 }
 
 /// Parses text returned from the server in response to the LOGOUT command.
-pub fn response_logout(input: &str) -> Result<Response, Error> {
+pub fn response_logout(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
 /// Parses text returned from the server in response to the GETSCRIPT command.
-pub fn response_getscript(input: &str) -> Result<(String, Response), Error> {
+pub fn response_getscript(input: &str) -> Result<(&str, String, Response), Error> {
     match p::response_getscript(input) {
-        Ok((_, (Some(s), resp))) => Ok((s, resp)),
+        Ok((left, (Some(s), resp))) => Ok((left, s, resp)),
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
         _ => Err(Error::InvalidResponse),
     }
 }
 
 /// Parses text returned from the server in response to the GETSCRIPT command.
-pub fn response_setactive(input: &str) -> Result<Response, Error> {
+pub fn response_setactive(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
 /// Parses text returned from the server in response to the LISTSCRIPTS command.
 /// Returns list of scripts and a bool indicating if that script is the active
 /// script.
-pub fn response_listscripts(input: &str) -> Result<(Vec<(String, bool)>, Response), Error> {
+pub fn response_listscripts(input: &str) -> Result<(&str, Vec<(String, bool)>, Response), Error> {
     match p::response_listscripts(input) {
-        Ok((_, (s, resp))) => {
+        Ok((left, (s, resp))) => {
             if s.iter().filter(|(_, is_active)| *is_active).count() > 1 {
                 Err(Error::InvalidResponse)
             } else {
-                Ok((s, resp))
+                Ok((left, s, resp))
             }
         }
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
@@ -268,30 +267,30 @@ pub fn response_listscripts(input: &str) -> Result<(Vec<(String, bool)>, Respons
 }
 
 /// Parses text returned from the server in response to the DELETESCRIPT command.
-pub fn response_deletescript(input: &str) -> Result<Response, Error> {
+pub fn response_deletescript(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
 /// Parses text returned from the server in response to the PUTSCRIPT command.
-pub fn response_putscript(input: &str) -> Result<Response, Error> {
+pub fn response_putscript(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
 /// Parses text returned from the server in response to the CHECKSCRIPT command.
-pub fn response_checkscript(input: &str) -> Result<Response, Error> {
+pub fn response_checkscript(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
 /// Parses text returned from the server in response to the CAPABILITY command.
 /// Returns list of capabilities and optional additional strings.
-pub fn response_capability(input: &str) -> Result<(Vec<Capability>, Response), Error> {
+pub fn response_capability(input: &str) -> Result<(&str, Vec<Capability>, Response), Error> {
     match p::response_capability(input) {
-        Ok((_, (s, resp))) => {
+        Ok((left, (s, resp))) => {
             let caps = s
                 .iter()
                 .map(|(cap, rest)| Capability::try_from((&**cap, rest.as_deref())).unwrap())
                 .collect();
-            Ok((caps, resp))
+            Ok((left, caps, resp))
         }
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
         _ => Err(Error::InvalidResponse),
@@ -299,20 +298,20 @@ pub fn response_capability(input: &str) -> Result<(Vec<Capability>, Response), E
 }
 
 /// Parses text returned from the server in response to the HAVESPACE command.
-pub fn response_havespace(input: &str) -> Result<Response, Error> {
+pub fn response_havespace(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
 /// Parses text returned from the server in response to the STARTTLS command.
 /// Returns list of capabilities and optional additional strings.
-pub fn response_starttls(input: &str) -> Result<(Vec<Capability>, Response), Error> {
+pub fn response_starttls(input: &str) -> Result<(&str, Vec<Capability>, Response), Error> {
     match p::response_starttls(input) {
-        Ok((_, (s, resp))) => {
+        Ok((left, (s, resp))) => {
             let caps = s
                 .iter()
                 .map(|(cap, rest)| Capability::try_from((&**cap, rest.as_deref())).unwrap())
                 .collect();
-            Ok((caps, resp))
+            Ok((left, caps, resp))
         }
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
         _ => Err(Error::InvalidResponse),
@@ -320,22 +319,25 @@ pub fn response_starttls(input: &str) -> Result<(Vec<Capability>, Response), Err
 }
 
 /// Parses text returned from the server in response to the RENAMESCRIPT command.
-pub fn response_renamescript(input: &str) -> Result<Response, Error> {
+pub fn response_renamescript(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
 /// Parses text returned from the server in response to the NOOP command.
-pub fn response_noop(input: &str) -> Result<(), Error> {
+pub fn response_noop(input: &str) -> Result<(&str, Response), Error> {
     match response_oknobye(input) {
-        Ok(Response {
-            tag: OkNoBye::Ok, ..
-        }) => Ok(()),
+        Ok((
+            left,
+            r @ Response {
+                tag: OkNoBye::Ok, ..
+            },
+        )) => Ok((left, r)),
         Ok(_) => Err(Error::InvalidResponse),
         Err(e) => Err(e),
     }
 }
 
 /// Parses text returned from the server in response to the UNAUTHENTICATE command.
-pub fn response_unauthenticate(input: &str) -> Result<Response, Error> {
+pub fn response_unauthenticate(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
