@@ -10,6 +10,7 @@ use crate::parser as p;
 pub enum Error {
     IncompleteResponse,
     InvalidResponse,
+    InvalidInput,
 }
 
 #[derive(Debug, PartialEq)]
@@ -90,32 +91,32 @@ impl Command {
         Command::Capability
     }
 
-    pub fn have_space(name: &str, size: usize) -> Command {
-        Command::HaveSpace(name.to_owned(), size)
+    pub fn have_space(name: &str, size: usize) -> Result<Command, Error> {
+        Ok(Command::HaveSpace(to_sieve_name(name)?, size))
     }
 
-    pub fn put_script(name: &str, script: &str) -> Command {
-        Command::PutScript(name.to_owned(), script.to_owned())
+    pub fn put_script(name: &str, script: &str) -> Result<Command, Error> {
+        Ok(Command::PutScript(to_sieve_name(name)?, script.to_owned()))
     }
 
     pub fn list_scripts() -> Command {
         Command::ListScripts
     }
 
-    pub fn set_active(name: &str) -> Command {
-        Command::SetActive(name.to_owned())
+    pub fn set_active(name: &str) -> Result<Command, Error> {
+        Ok(Command::SetActive(to_sieve_name(name)?))
     }
 
-    pub fn deletescript(name: &str) -> Command {
-        Command::DeleteScript(name.to_owned())
+    pub fn deletescript(name: &str) -> Result<Command, Error> {
+        Ok(Command::DeleteScript(to_sieve_name(name)?))
     }
 
-    pub fn renamescript(name: &str) -> Command {
-        Command::RenameScript(name.to_owned())
+    pub fn renamescript(name: &str) -> Result<Command, Error> {
+        Ok(Command::RenameScript(to_sieve_name(name)?))
     }
 
-    pub fn checkscript(name: &str) -> Command {
-        Command::CheckScript(name.to_owned())
+    pub fn checkscript(name: &str) -> Result<Command, Error> {
+        Ok(Command::CheckScript(to_sieve_name(name)?))
     }
 
     pub fn noop() -> Command {
@@ -125,6 +126,14 @@ impl Command {
     pub fn unauthenticate() -> Command {
         Command::UnAuthenticate
     }
+}
+
+fn to_sieve_name(s: &str) -> Result<String, Error> {
+    if s.chars().find(|c| p::is_bad_sieve_name_char(*c)).is_some() {
+        return Err(Error::InvalidInput);
+    }
+
+    Ok(s.to_owned())
 }
 
 // to quotedstring

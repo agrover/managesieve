@@ -54,7 +54,7 @@ fn atom(input: &str) -> IResult<&str, ResponseCode> {
             "QUOTA" => ResponseCode::Quota(QuotaVariant::None),
             "QUOTA/MAXSCRIPTS" => ResponseCode::Quota(QuotaVariant::MaxScripts),
             "QUOTA/MAXSIZE" => ResponseCode::Quota(QuotaVariant::MaxSize),
-            "REFERRAL" => ResponseCode::Referral(SieveUrl),
+            "REFERRAL" => ResponseCode::Referral(SieveUrl::new()),
             "SASL" => ResponseCode::Sasl,
             "TRANSITION-NEEDED" => ResponseCode::TransitionNeeded,
             "TRYLATER" => ResponseCode::TryLater,
@@ -199,20 +199,20 @@ fn test_quoted_string() {
     assert!(quoted_string("hello").is_err());
 }
 
-pub fn sieve_name_c2s(input: &str) -> IResult<&str, String> {
-    // see section 1.6 of rfc 5804
-    fn is_bad(c: char) -> bool {
-        match c {
-            c if (c <= 0x1f as char) => true,
-            c if (c >= 0x7f as char && c <= 0x9f as char) => true,
-            c if (c == '\u{2028}' || c == '\u{2029}') => true,
-            _ => false,
-        }
+// see section 1.6 of rfc 5804
+pub fn is_bad_sieve_name_char(c: char) -> bool {
+    match c {
+        c if (c <= 0x1f as char) => true,
+        c if (c >= 0x7f as char && c <= 0x9f as char) => true,
+        c if (c == '\u{2028}' || c == '\u{2029}') => true,
+        _ => false,
     }
+}
 
+pub fn sieve_name_c2s(input: &str) -> IResult<&str, String> {
     match sievestring_c2s(input) {
         Err(e) => Err(e),
-        Ok((rest, s)) => match s.chars().find(|c| is_bad(*c)) {
+        Ok((rest, s)) => match s.chars().find(|c| is_bad_sieve_name_char(*c)) {
             Some(_) => Err(nom::Err::Failure(make_error(input, ErrorKind::Char))),
             None => Ok((rest, s)),
         },
