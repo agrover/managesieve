@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use std::convert::TryFrom;
 use std::io::{self, ErrorKind};
 
@@ -16,39 +14,44 @@ pub enum Error {
 #[derive(Debug, PartialEq)]
 pub enum Capability {
     Implementation(String),
-    Notify(String),
     Sasl(Vec<String>),
     Sieve(Vec<String>),
     StartTls,
+    MaxRedirects(usize),
+    Notify(Vec<String>),
+    Language(String),
+    Owner(String),
     Version(String),
+    Unknown(String, Option<String>),
 }
 
-impl TryFrom<&str> for Capability {
+impl TryFrom<(&str, Option<&str>)> for Capability {
     type Error = io::Error;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        let spl = s.split_once(' ');
-        let mut cmd = spl.unwrap().0;
-        if cmd.starts_with('"') {
-            cmd = &cmd[1..cmd.len() - 1];
-        }
-        let rest = spl.map(|(_, pre)| &pre[1..pre.len() - 1]);
+    fn try_from(s: (&str, Option<&str>)) -> Result<Self, Self::Error> {
+        let (cap, rest) = s;
 
-        match cmd {
-            "IMPLEMENTATION" => Ok(Capability::Implementation(rest.unwrap().to_owned())),
-            "NOTIFY" => Ok(Capability::Notify(rest.unwrap().to_owned())),
-            "SASL" => Ok(Capability::Sasl(Vec::new())),
-            "SIEVE" => Ok(Capability::Sieve(
-                rest.map(|r| r.split(' ').map(|x| x.to_string()).collect())
-                    .unwrap(),
-            )),
-            "STARTTLS" => Ok(Capability::StartTls),
-            "VERSION" => Ok(Capability::Version(rest.unwrap().to_owned())),
-            _ => Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                "Invalid Capability",
-            )),
-        }
+        let err = || io::Error::new(ErrorKind::InvalidInput, "Invalid Capability");
+        let unwrap_rest = || rest.map(|o| o.to_owned()).ok_or_else(|| err());
+        let unwrap_rest_vec = || {
+            rest.map(|r| r.split(' ').map(|x| x.to_string()).collect())
+                .ok_or_else(|| err())
+        };
+
+        Ok(match cap {
+            "IMPLEMENTATION" => Capability::Implementation(unwrap_rest()?),
+            "SASL" => Capability::Sasl(unwrap_rest_vec()?),
+            "SIEVE" => Capability::Sieve(unwrap_rest_vec()?),
+            "STARTTLS" => Capability::StartTls,
+            "MAXREDIRECTS" => {
+                Capability::MaxRedirects(unwrap_rest()?.parse::<usize>().map_err(|_| err())?)
+            }
+            "NOTIFY" => Capability::Notify(unwrap_rest_vec()?),
+            "LANGUAGE" => Capability::Owner(unwrap_rest()?),
+            "OWNER" => Capability::Owner(unwrap_rest()?),
+            "VERSION" => Capability::Version(unwrap_rest()?),
+            cap => Capability::Unknown(cap.to_owned(), rest.map(|s| s.to_owned())),
+        })
     }
 }
 
@@ -180,7 +183,7 @@ pub enum ResponseCode {
     Warnings,
 }
 
-pub fn response_oknobye(input: &str) -> Result<Response, Error> {
+fn response_oknobye(input: &str) -> Result<Response, Error> {
     match p::response(input) {
         Ok((_, response)) => Ok(response),
         Err(e) => match e {
@@ -191,35 +194,39 @@ pub fn response_oknobye(input: &str) -> Result<Response, Error> {
     }
 }
 
-pub fn response_authenticate(input: &str) -> Result<OkNoBye, Error> {
+pub fn response_authenticate(_input: &str) -> Result<OkNoBye, Error> {
     unimplemented!()
 }
 
+/// Parses text returned from the server in response to the LOGOUT command.
 pub fn response_logout(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }
 
-pub fn response_getscript(input: &str) -> Result<String, Error> {
+/// Parses text returned from the server in response to the GETSCRIPT command.
+pub fn response_getscript(input: &str) -> Result<(String, Response), Error> {
     match p::response_getscript(input) {
-        Ok((_, (Some(s), resp))) => Ok(s),
+        Ok((_, (Some(s), resp))) => Ok((s, resp)),
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
         _ => Err(Error::InvalidResponse),
     }
 }
 
+/// Parses text returned from the server in response to the GETSCRIPT command.
 pub fn response_setactive(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }
 
-/// Returns list of scripts and a bool for the maximum of one script that is
-/// active.
-pub fn response_listscripts(input: &str) -> Result<Vec<(String, bool)>, Error> {
+/// Parses text returned from the server in response to the LISTSCRIPTS command.
+/// Returns list of scripts and a bool indicating if that script is the active
+/// script.
+pub fn response_listscripts(input: &str) -> Result<(Vec<(String, bool)>, Response), Error> {
     match p::response_listscripts(input) {
         Ok((_, (s, resp))) => {
-            if s.iter().filter(|(s, is_active)| *is_active).count() > 1 {
+            if s.iter().filter(|(_, is_active)| *is_active).count() > 1 {
                 Err(Error::InvalidResponse)
             } else {
-                Ok(s)
+                Ok((s, resp))
             }
         }
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
@@ -227,44 +234,64 @@ pub fn response_listscripts(input: &str) -> Result<Vec<(String, bool)>, Error> {
     }
 }
 
+/// Parses text returned from the server in response to the DELETESCRIPT command.
 pub fn response_deletescript(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }
 
+/// Parses text returned from the server in response to the PUTSCRIPT command.
 pub fn response_putscript(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }
 
+/// Parses text returned from the server in response to the CHECKSCRIPT command.
 pub fn response_checkscript(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }
 
-pub fn response_capability(
-    input: &str,
-) -> Result<(Vec<(String, Option<String>)>, Response), Error> {
+/// Parses text returned from the server in response to the CAPABILITY command.
+/// Returns list of capabilities and optional additional strings.
+pub fn response_capability(input: &str) -> Result<(Vec<Capability>, Response), Error> {
     match p::response_capability(input) {
-        Ok((_, (s, resp))) => Ok((s, resp)),
+        Ok((_, (s, resp))) => {
+            let caps = s
+                .iter()
+                .map(|(cap, rest)| Capability::try_from((&**cap, rest.as_deref())).unwrap())
+                .collect();
+            Ok((caps, resp))
+        }
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
         _ => Err(Error::InvalidResponse),
     }
 }
 
+/// Parses text returned from the server in response to the HAVESPACE command.
 pub fn response_havespace(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }
 
-pub fn response_starttls(input: &str) -> Result<(Vec<(String, Option<String>)>, Response), Error> {
+/// Parses text returned from the server in response to the STARTTLS command.
+/// Returns list of capabilities and optional additional strings.
+pub fn response_starttls(input: &str) -> Result<(Vec<Capability>, Response), Error> {
     match p::response_starttls(input) {
-        Ok((_, (s, resp))) => Ok((s, resp)),
+        Ok((_, (s, resp))) => {
+            let caps = s
+                .iter()
+                .map(|(cap, rest)| Capability::try_from((&**cap, rest.as_deref())).unwrap())
+                .collect();
+            Ok((caps, resp))
+        }
         Err(nom::Err::Incomplete(_)) => Err(Error::IncompleteResponse),
         _ => Err(Error::InvalidResponse),
     }
 }
 
+/// Parses text returned from the server in response to the RENAMESCRIPT command.
 pub fn response_renamescript(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }
 
+/// Parses text returned from the server in response to the NOOP command.
 pub fn response_noop(input: &str) -> Result<(), Error> {
     match response_oknobye(input) {
         Ok(Response {
@@ -275,6 +302,7 @@ pub fn response_noop(input: &str) -> Result<(), Error> {
     }
 }
 
+/// Parses text returned from the server in response to the UNAUTHENTICATE command.
 pub fn response_unauthenticate(input: &str) -> Result<Response, Error> {
     response_oknobye(input)
 }

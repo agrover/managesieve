@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use either::Either;
 use nom::{
     branch::alt,
@@ -326,7 +328,7 @@ pub fn response_listscripts(input: &str) -> IResult<&str, (Vec<(String, bool)>, 
             ),
             crlf,
         )),
-        response_ok,
+        response,
     )(input)
 }
 
@@ -335,6 +337,8 @@ fn test_response_listscripts() {
     response_listscripts("\"script1\"\r\n\"script2\"\r\nOK\r\n").unwrap();
     response_listscripts("\"script1\" ACTIVE\r\n\"script2\"\r\nOK\r\n").unwrap();
     response_listscripts("\"script1\" active\r\n\"script2\"\r\nOK\r\n").unwrap();
+    response_listscripts("OK\r\n").unwrap();
+    response_listscripts("BYE\r\n").unwrap();
 }
 
 fn single_capability(input: &str) -> IResult<&str, (String, Option<String>)> {
