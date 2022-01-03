@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::io::{self, ErrorKind};
+use std::string::ToString;
 
 use nom;
 
@@ -123,6 +124,38 @@ impl Command {
 
     pub fn unauthenticate() -> Command {
         Command::UnAuthenticate
+    }
+}
+
+// to quotedstring
+fn to_qs(s: &str) -> String {
+    // TODO: escape some things in s?
+    format!("\"{}\"", s)
+}
+
+fn to_lit_c2s(s: &str) -> String {
+    format!("{{{}+}}\r\n{}", s.len(), s)
+}
+
+impl ToString for Command {
+    fn to_string(&self) -> String {
+        match self {
+            Command::Authenticate => "AUTHENTICATE\r\n".into(),
+            Command::StartTls => "STARTTLS\r\n".into(),
+            Command::Logout => "LOGOUT\r\n".into(),
+            Command::Capability => "CAPABILITY\r\n".into(),
+            Command::HaveSpace(name, size) => format!("HAVESPACE {} {}\r\n", to_qs(name), size),
+            Command::PutScript(name, script) => {
+                format!("PUTSCRIPT {} {}\r\n", to_qs(name), to_lit_c2s(script))
+            }
+            Command::ListScripts => "LISTSCRIPTS\r\n".into(),
+            Command::SetActive(name) => format!("SETACTIVE {}\r\n", to_qs(name)),
+            Command::DeleteScript(name) => format!("DELETESCRIPT {}\r\n", to_qs(name)),
+            Command::RenameScript(name) => format!("RENAMESCRIPT {}\r\n", to_qs(name)),
+            Command::CheckScript(name) => format!("CHECKSCRIPT {}\r\n", to_qs(name)),
+            Command::Noop => "NOOP\r\n".into(),
+            Command::UnAuthenticate => "UNAUTHENTICATE\r\n".into(),
+        }
     }
 }
 
