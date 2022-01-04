@@ -3,7 +3,7 @@
 //!
 //! # Usage
 //!
-//! Commands can be generated in the correct form by constructin a [`Command`]
+//! Commands can be generated in the correct form by constructing a [`Command`]
 //! of the desired type, which can then be converted into a string and sent.
 //!
 //! Response parsing is achieved by passing bytes received from the managesieve
