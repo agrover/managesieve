@@ -12,9 +12,8 @@ use nom::{
     IResult,
 };
 
-use crate::{
-    types::{OkNoBye, QuotaVariant, Response, ResponseCode, SieveUrl},
-    MSResult, MSResultList,
+use crate::types::{
+    MSResult, MSResultList, OkNoBye, QuotaVariant, Response, ResponseCode, SieveUrl,
 };
 
 pub(crate) fn ok(input: &str) -> IResult<&str, OkNoBye> {
