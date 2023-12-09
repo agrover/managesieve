@@ -13,5 +13,5 @@ keywords = ["email", "sieve", "managesieve", "filter", "parser"]
 categories = ["parser-implementations", "parsing", "email", "api-bindings"]
 
 [dependencies]
-nom = "6.2.0"
-either = "1.6.1"
+nom = "7.1"
+either = "1.6"
