@@ -5,7 +5,14 @@ authors = ["Andy Grover <andy@groveronline.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Support for parsing ManageSieve protocol (RFC 5804)"
+documentation = "https://docs.rs/managesieve/0.1.1/managesieve/"
+readme = "README.md"
+homepage = "https://github.com/agrover/managesieve"
+repository = "https://github.com/agrover/managesieve"
+keywords = ["email", "sieve", "managesieve", "filter", "parser"]
+categories = ["parser-implementations", "parsing", "email", "api-bindings"]
 
 [dependencies]
-nom = "6.2.0"
-either = "1.6.1"
+nom = "7.1"
+either = "1.6"
+thiserror = "1.0"

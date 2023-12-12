@@ -12,7 +12,9 @@ use nom::{
     IResult,
 };
 
-use crate::types::{OkNoBye, QuotaVariant, Response, ResponseCode, SieveUrl};
+use crate::types::{
+    MSResult, MSResultList, OkNoBye, QuotaVariant, Response, ResponseCode, SieveUrl,
+};
 
 pub(crate) fn ok(input: &str) -> IResult<&str, OkNoBye> {
     value(OkNoBye::Ok, tag_no_case("OK"))(input)
@@ -71,7 +73,7 @@ fn atom(input: &str) -> IResult<&str, ResponseCode> {
 #[test]
 fn test_atom() {
     assert!(matches!(atom("SASL"), Ok(("", ResponseCode::Sasl))));
-    assert!(matches!(atom("ABCDE"), Err(_)));
+    assert!(atom("ABCDE").is_err());
 }
 
 fn literal_s2c_len(input: &str) -> IResult<&str, usize> {
@@ -89,7 +91,7 @@ fn literal_s2c_len(input: &str) -> IResult<&str, usize> {
 fn test_literal_s2c_len() {
     assert!(matches!(literal_s2c_len("{3}\r\n"), Ok(("", 3))));
     assert!(matches!(literal_s2c_len("{0}\r\n"), Ok(("", 0))));
-    assert!(matches!(literal_s2c_len("{3}"), Err(_)));
+    assert!(literal_s2c_len("{3}").is_err());
     assert!(matches!(literal_s2c_len("{3}\r\nab"), Ok(("ab", 3))));
 }
 
@@ -295,11 +297,11 @@ fn test_response() {
     response("BYE\r\n").unwrap();
     response("ok (QUOTA)\r\n").unwrap();
     response("ok (QUOTA) \"hello\"\r\n").unwrap();
-    assert!(matches!(response("ok"), Err(_)));
-    assert!(matches!(response(" ok\r\n"), Err(_)));
-    assert!(matches!(response("ok (\r\n"), Err(_)));
-    assert!(matches!(response("ok (QUOTA\r\n"), Err(_)));
-    assert!(matches!(response("ok (QUOTA/)\r\n"), Err(_)));
+    assert!(response("ok").is_err());
+    assert!(response(" ok\r\n").is_err());
+    assert!(response("ok (\r\n").is_err());
+    assert!(response("ok (QUOTA\r\n").is_err());
+    assert!(response("ok (QUOTA/)\r\n").is_err());
 }
 
 pub fn response_getscript(input: &str) -> IResult<&str, (Option<String>, Response)> {
@@ -316,10 +318,10 @@ pub fn response_getscript(input: &str) -> IResult<&str, (Option<String>, Respons
 fn test_response_getscript() {
     response_getscript("\"hello\"\r\nOK\r\n").unwrap();
     response_getscript("NO\r\n").unwrap();
-    assert!(matches!(response_getscript("\"hello\"\r\nBYE\r\n"), Err(_)));
+    assert!(response_getscript("\"hello\"\r\nBYE\r\n").is_err());
 }
 
-pub fn response_listscripts(input: &str) -> IResult<&str, (Vec<(String, bool)>, Response)> {
+pub fn response_listscripts(input: &str) -> MSResultList<(String, bool)> {
     pair(
         many0(terminated(
             pair(
@@ -357,7 +359,8 @@ fn test_single_capability() {
 
 pub fn response_capability(
     input: &str,
-) -> IResult<&str, (Vec<(String, Option<String>)>, Response)> {
+    //) -> IResult<&str, (Vec<(String, Option<String>)>, Response)> {
+) -> MSResultList<(String, Option<String>)> {
     pair(many0(single_capability), response)(input)
 }
 
@@ -372,7 +375,7 @@ fn test_response_capability_2() {
     response_capability(inc1).unwrap();
 }
 
-pub fn response_starttls(input: &str) -> IResult<&str, (Vec<(String, Option<String>)>, Response)> {
+pub fn response_starttls(input: &str) -> MSResultList<(String, Option<String>)> {
     alt((
         preceded(response_ok, response_capability),
         map(response_nobye, |r| (Vec::new(), r)),
@@ -389,8 +392,8 @@ fn test_response_starttls() {
 /// response.
 pub fn response_authenticate_initial(input: &str) -> IResult<&str, Either<String, Response>> {
     alt((
-        map(terminated(sievestring_s2c, crlf), |s| Either::Left(s)),
-        map(response_nobye, |r| Either::Right(r)),
+        map(terminated(sievestring_s2c, crlf), Either::Left),
+        map(response_nobye, Either::Right),
     ))(input)
 }
 
@@ -404,7 +407,7 @@ fn test_response_authenticate_initial() {
 /// capabilities if OK.
 pub fn response_authenticate_complete(
     input: &str,
-) -> IResult<&str, (Option<Vec<(String, Option<String>)>>, Response)> {
+) -> MSResult<Option<Vec<(String, Option<String>)>>> {
     alt((
         map(
             pair(response_ok, opt(response_capability)),

@@ -1,19 +1,33 @@
 use std::convert::TryFrom;
+use std::fmt::Display;
 use std::io::{self, ErrorKind};
 use std::string::ToString;
 
-use nom;
+use nom::IResult;
 
 use crate::parser as p;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum Error {
+    #[error("incomplete response")]
     IncompleteResponse,
+    #[error("invalid response")]
     InvalidResponse,
+    #[error("invalid input")]
     InvalidInput,
 }
 
-#[derive(Debug, PartialEq)]
+impl<T> From<nom::Err<T>> for Error {
+    fn from(value: nom::Err<T>) -> Self {
+        match value {
+            nom::Err::Incomplete(_) => Self::IncompleteResponse,
+            nom::Err::Error(_) => Self::InvalidInput,
+            nom::Err::Failure(_) => Self::InvalidInput,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Capability {
     Implementation(String),
     Sasl(Vec<String>),
@@ -34,10 +48,10 @@ impl TryFrom<(&str, Option<&str>)> for Capability {
         let (cap, rest) = s;
 
         let err = || io::Error::new(ErrorKind::InvalidInput, "Invalid Capability");
-        let unwrap_rest = || rest.map(|o| o.to_owned()).ok_or_else(|| err());
+        let unwrap_rest = || rest.map(|o| o.to_owned()).ok_or_else(err);
         let unwrap_rest_vec = || {
             rest.map(|r| r.split(' ').map(|x| x.to_string()).collect())
-                .ok_or_else(|| err())
+                .ok_or_else(err)
         };
 
         Ok(match cap {
@@ -129,7 +143,7 @@ impl Command {
 }
 
 fn to_sieve_name(s: &str) -> Result<String, Error> {
-    if s.chars().find(|c| p::is_bad_sieve_name_char(*c)).is_some() {
+    if s.chars().any(p::is_bad_sieve_name_char) {
         return Err(Error::InvalidInput);
     }
 
@@ -225,14 +239,7 @@ pub enum ResponseCode {
 }
 
 fn response_oknobye(input: &str) -> Result<(&str, Response), Error> {
-    match p::response(input) {
-        Ok((left, response)) => Ok((left, response)),
-        Err(e) => match e {
-            nom::Err::Incomplete(_) => Err(Error::IncompleteResponse),
-            nom::Err::Error(_) => Err(Error::InvalidResponse),
-            nom::Err::Failure(_) => Err(Error::InvalidResponse),
-        },
-    }
+    p::response(input).map_err(Error::from)
 }
 
 pub fn response_authenticate(_input: &str) -> Result<OkNoBye, Error> {
@@ -258,10 +265,12 @@ pub fn response_setactive(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
 
+pub type ScriptList = Vec<(String, bool)>;
+
 /// Parses text returned from the server in response to the LISTSCRIPTS command.
 /// Returns list of scripts and a bool indicating if that script is the active
 /// script.
-pub fn response_listscripts(input: &str) -> Result<(&str, Vec<(String, bool)>, Response), Error> {
+pub fn response_listscripts(input: &str) -> Result<(&str, ScriptList, Response), Error> {
     match p::response_listscripts(input) {
         Ok((left, (s, resp))) => {
             if s.iter().filter(|(_, is_active)| *is_active).count() > 1 {
@@ -350,3 +359,6 @@ pub fn response_noop(input: &str) -> Result<(&str, Response), Error> {
 pub fn response_unauthenticate(input: &str) -> Result<(&str, Response), Error> {
     response_oknobye(input)
 }
+
+pub type MSResult<'a, T> = IResult<&'a str, (T, Response)>;
+pub type MSResultList<'a, T> = IResult<&'a str, (Vec<T>, Response)>;
