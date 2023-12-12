@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::fmt::Display;
 use std::io::{self, ErrorKind};
 use std::string::ToString;
 
@@ -6,14 +7,27 @@ use nom::IResult;
 
 use crate::parser as p;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum Error {
+    #[error("incomplete response")]
     IncompleteResponse,
+    #[error("invalid response")]
     InvalidResponse,
+    #[error("invalid input")]
     InvalidInput,
 }
 
-#[derive(Debug, PartialEq)]
+impl<T> From<nom::Err<T>> for Error {
+    fn from(value: nom::Err<T>) -> Self {
+        match value {
+            nom::Err::Incomplete(_) => Self::IncompleteResponse,
+            nom::Err::Error(_) => Self::InvalidInput,
+            nom::Err::Failure(_) => Self::InvalidInput,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Capability {
     Implementation(String),
     Sasl(Vec<String>),
@@ -225,14 +239,7 @@ pub enum ResponseCode {
 }
 
 fn response_oknobye(input: &str) -> Result<(&str, Response), Error> {
-    match p::response(input) {
-        Ok((left, response)) => Ok((left, response)),
-        Err(e) => match e {
-            nom::Err::Incomplete(_) => Err(Error::IncompleteResponse),
-            nom::Err::Error(_) => Err(Error::InvalidResponse),
-            nom::Err::Failure(_) => Err(Error::InvalidResponse),
-        },
-    }
+    p::response(input).map_err(Error::from)
 }
 
 pub fn response_authenticate(_input: &str) -> Result<OkNoBye, Error> {

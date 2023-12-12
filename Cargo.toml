@@ -15,3 +15,4 @@ categories = ["parser-implementations", "parsing", "email", "api-bindings"]
 [dependencies]
 nom = "7.1"
 either = "1.6"
+thiserror = "1.0"
